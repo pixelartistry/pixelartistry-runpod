@@ -1,0 +1,22 @@
+# Pinned core stack. visualbruno's Linux wheels (Torch2110 folder) are built for exactly this torch.
+torch==2.11.0
+torchvision==0.26.0
+torchaudio==2.11.0
+xformers==0.0.35
+
+# Extra packages the Trellis2 / MoGe code imports that aren't in either requirements.txt
+huggingface_hub[hf_xet]
+trimesh
+easydict
+einops
+imageio
+imageio-ffmpeg
+transformers
+accelerate
+plyfile
+omegaconf
+zstandard
+scikit-image
+matplotlib
+# utils3d from PyPI is an old 0.1.x release that can't install on Python 3.13; MoGe/TRELLIS.2 use this one
+utils3d @ git+https://github.com/EasternJournalist/utils3d.git@ca3e9ac015ab3473a37ea60f2f55063696638416

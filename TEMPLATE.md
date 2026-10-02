@@ -1,6 +1,6 @@
 # RunPod template — PixelArtistry · Trellis2 & Pixal3D
 
-**In the image:** ComfyUI v0.38.2 (native Trellis2 + Pixal3D nodes) · Python 3.13 · PyTorch 2.11 (CUDA 13) · xformers · every package visualbruno's nodes need. Built by GitHub Actions, hosted free on GitHub's registry.
+**In the image:** ComfyUI v0.38.2 (native Trellis2 + Pixal3D nodes) · Python 3.12 · PyTorch 2.8 (CUDA 12.8) · xformers · every package visualbruno's nodes need. Built by GitHub Actions, hosted free on GitHub's registry.
 
 **Fetched by each pod at start:** visualbruno/ComfyUI-Trellis2 (pinned to `b0e84c0`, 25 Sep 2026, still the newest commit) with its prebuilt wheels and 23 example workflows, plus meshlib. **Downloaded once into the volume:** the models.
 
@@ -62,12 +62,12 @@ Save, then copy the template's share link. That link goes into Chapter 16 of the
 ## 4. Test pod
 
 - RTX 4090 or RTX 5090, Community Cloud.
-- **Filter → CUDA version: 13.0.** The image needs NVIDIA driver 580+. On an older host the log says so and stops.
+- **Filter → CUDA version: 12.8 or newer.** The image needs NVIDIA driver 570+. On an older host the log says so and stops.
 - Watch **Logs**: steps 1/5 to 5/5, ending with ComfyUI's "To see the GUI go to". Note the total time of the first start for the guide.
 
 Check these four things:
 
-1. Step 3 prints `torch 2.11.0 · CUDA 13.0 · GPU ok`.
+1. Step 3 prints `torch 2.8.0+cu128 · CUDA 12.8 · GPU ok`.
 2. **Connect → HTTP 8188**: drag in one PA_ preset (e.g. the 6 GB Pixal3D one) and run it.
 3. Run one example from the *visualbruno* folder in the Workflows sidebar.
 4. **Connect → HTTP 8080**: the GLB from step 2 is there and downloads.

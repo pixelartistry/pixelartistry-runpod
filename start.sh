@@ -12,7 +12,8 @@ WS="${WORKSPACE:-/workspace}"
 MODELS="${MODELS:-int8 bf16 multiview vb}"                               # int8 | bf16 | multiview | vb
 TRELLIS2_REF="${TRELLIS2_REF:-b0e84c0f29857a444e8bcb5b9be2ea218e96efd0}" # visualbruno/ComfyUI-Trellis2 @ 2026-09-25 ("main" = always newest, untested)
 MESHLIB_VERSION="${MESHLIB_VERSION:-3.1.4.297}"
-WHEELS_SUBDIR="${PA_WHEELS_SUBDIR:-Torch2110}"                           # set in the image; matches its PyTorch
+WHEEL_TAG="${PA_WHEEL_TAG:-cu128torch2.8}"                               # set in the image; matches its PyTorch
+WHEEL_INDEX="https://pozzettiandrea.github.io/cuda-wheels/"                # PozzettiAndrea/cuda-wheels
 COMFY_PORT="${COMFY_PORT:-8188}"
 FILES_PORT="${FILES_PORT:-8080}"
 COMFYUI_ARGS="${COMFYUI_ARGS:-}"
@@ -37,8 +38,8 @@ command -v nvidia-smi >/dev/null 2>&1 || stop "No NVIDIA GPU found. Deploy this 
 GPU="$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | head -1)"
 DRV="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)"
 log "GPU: $GPU · driver $DRV"
-if (( ${DRV%%.*} < 580 )); then
-  stop "Driver $DRV is too old: this image uses CUDA 13 and needs driver 580+. Terminate this pod and redeploy with Filter -> CUDA version 13.0."
+if (( ${DRV%%.*} < 570 )); then
+  stop "Driver $DRV is too old: this image uses CUDA 12.8 and needs driver 570+. Terminate this pod and redeploy with Filter -> CUDA version 12.8 (or newer)."
 fi
 
 # SSH: RunPod passes PUBLIC_KEY when you've added an SSH key in your account settings
@@ -61,7 +62,7 @@ if [[ ! "$TRELLIS2_REF" =~ ^[0-9a-f]{40}$ || "$(git -C "$T2" rev-parse HEAD)" !=
   git -C "$T2" checkout -q -f --detach "origin/$TRELLIS2_REF" 2>/dev/null || git -C "$T2" checkout -q -f --detach "$TRELLIS2_REF"
 fi
 
-# flash_attn has no wheel for Torch 2.11 + CUDA 13, so new LoadModel nodes default to sdpa + xformers
+# flash_attn has no prebuilt wheel in this image, so new LoadModel nodes default to sdpa + xformers
 "$PY" - "$T2/nodes.py" <<'PY'
 import re, sys
 p = sys.argv[1]; s = open(p).read()
@@ -71,12 +72,17 @@ open(p, "w").write(s)
 PY
 ln -sfn "$T2" "$COMFY/custom_nodes/ComfyUI-Trellis2"
 
-# Prebuilt CUDA wheels from the repo + meshlib. The container disk resets on every Stop,
-# so this runs each start; with the cache in /workspace it takes a few seconds.
-ls "$T2/wheels/Linux/$WHEELS_SUBDIR/"*.whl >/dev/null 2>&1 \
-  || stop "This ComfyUI-Trellis2 version has no wheels/Linux/$WHEELS_SUBDIR folder. Remove the TRELLIS2_REF variable to go back to the tested version."
-uv pip install -q --python "$PY" --no-deps "$T2/wheels/Linux/$WHEELS_SUBDIR/"*.whl \
-  "meshlib==$MESHLIB_VERSION" "meshlib-core==$MESHLIB_VERSION"
+# Prebuilt CUDA wheels (cu128 + torch 2.8, Python 3.12) from PozzettiAndrea/cuda-wheels + meshlib.
+# The "-vb" builds are visualbruno's forks; they install as cumesh_vb / o_voxel_vb / flex_gemm_vb, but the
+# nodes (and the forks themselves) import cumesh / o_voxel / flex_gemm, so we alias them with symlinks.
+# The container disk resets on every Stop, so this runs each start; with the cache in /workspace it takes seconds.
+uv pip install -q --python "$PY" --no-deps --extra-index-url "$WHEEL_INDEX" --index-strategy unsafe-best-match \
+  "cumesh-vb==1.0+$WHEEL_TAG" "o-voxel-vb==0.0.1+$WHEEL_TAG" "flex-gemm-vb==1.0.0+$WHEEL_TAG" \
+  "nvdiffrast==0.4.0+$WHEEL_TAG" "nvdiffrec-render==0.0.1+$WHEEL_TAG" \
+  "meshlib==$MESHLIB_VERSION" "meshlib-core==$MESHLIB_VERSION" \
+  || stop "Could not install the CUDA wheels ($WHEEL_TAG) from $WHEEL_INDEX. Check the pod's internet access and restart."
+SP="$("$PY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+for m in cumesh o_voxel flex_gemm; do ln -sfn "$SP/${m}_vb" "$SP/$m"; done
 "$PY" -c "import torch, xformers, cumesh, o_voxel, flex_gemm, nvdiffrast.torch, meshlib.mrmeshpy, pymeshlab; print('torch', torch.__version__, '· CUDA', torch.version.cuda, '· GPU ok' if torch.cuda.is_available() else '· GPU NOT VISIBLE')"
 
 # ---------- 4/5 models (first start only; existing files are skipped) ----------

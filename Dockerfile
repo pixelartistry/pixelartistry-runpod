@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 # PixelArtistry · Trellis2 & Pixal3D — ComfyUI image for RunPod
 #
-# Baked into the image (all open licences): Ubuntu 24.04, Python 3.13, PyTorch 2.11 (CUDA 13),
+# Baked into the image (all open licences): Ubuntu 24.04, Python 3.12, PyTorch 2.8 (CUDA 12.8),
 # xformers, ComfyUI with the native Trellis2 + Pixal3D nodes, and every Python package
 # visualbruno's ComfyUI-Trellis2 needs.
 #
 # NOT in the image, fetched by each pod at start (see start.sh):
-#   - visualbruno/ComfyUI-Trellis2 itself and its prebuilt wheels (nvdiffrast/nvdiffrec are
-#     NVIDIA non-commercial licence), meshlib (own licence)
+#   - visualbruno/ComfyUI-Trellis2 itself and prebuilt CUDA wheels (cu128 + torch 2.8, cp312, from
+#     PozzettiAndrea/cuda-wheels; nvdiffrast/nvdiffrec are NVIDIA non-commercial licence), meshlib (own licence)
 #   - all model weights (downloaded once into the /workspace volume)
 #   - the paid PA_ workflows (buyers drag them in)
 
@@ -15,7 +15,7 @@ FROM ubuntu:24.04
 
 # Must match requirements.lock — after changing it, run ./lock.sh
 ARG COMFYUI_REF=v0.38.2
-ARG PYTHON_VERSION=3.13
+ARG PYTHON_VERSION=3.12
 
 ENV DEBIAN_FRONTEND=noninteractive \
     NVIDIA_VISIBLE_DEVICES=all \
@@ -25,7 +25,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_LINK_MODE=copy \
     VIRTUAL_ENV=/opt/venv \
     PATH=/opt/venv/bin:$PATH \
-    PA_WHEELS_SUBDIR=Torch2110
+    PA_WHEEL_TAG=cu128torch2.8
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \

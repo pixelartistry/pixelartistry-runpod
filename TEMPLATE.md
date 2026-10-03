@@ -1,6 +1,6 @@
 # RunPod template — PixelArtistry · Trellis2 & Pixal3D
 
-**In the image:** ComfyUI v0.38.2 (native Trellis2 + Pixal3D nodes) · Python 3.12 · PyTorch 2.8 (CUDA 12.8) · xformers · every package visualbruno's nodes need. Built by GitHub Actions, hosted free on GitHub's registry.
+**In the image:** ComfyUI v0.38.2 (native Trellis2 + Pixal3D nodes) · Python 3.12 · PyTorch 2.8 (CUDA 12.8) · xformers · flash-attn 2.8.3 · every package visualbruno's nodes need. Built by GitHub Actions, hosted free on GitHub's registry.
 
 **Fetched by each pod at start:** visualbruno/ComfyUI-Trellis2 (pinned to `b0e84c0`, 25 Sep 2026, still the newest commit) with its prebuilt wheels and 23 example workflows, plus meshlib. **Downloaded once into the volume:** the models.
 

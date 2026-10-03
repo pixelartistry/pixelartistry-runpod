@@ -2,7 +2,7 @@
 # PixelArtistry · Trellis2 & Pixal3D — ComfyUI image for RunPod
 #
 # Baked into the image (all open licences): Ubuntu 24.04, Python 3.12, PyTorch 2.8 (CUDA 12.8),
-# xformers, ComfyUI with the native Trellis2 + Pixal3D nodes, and every Python package
+# xformers, flash-attn, ComfyUI with the native Trellis2 + Pixal3D nodes, and every Python package
 # visualbruno's ComfyUI-Trellis2 needs.
 #
 # NOT in the image, fetched by each pod at start (see start.sh):
@@ -30,7 +30,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       git curl ca-certificates build-essential openssh-server \
-      libgl1 libglib2.0-0 libgomp1 libsm6 libxext6 libxrender1 libegl1 \
+      libgl1 libopengl0 libglib2.0-0 libgomp1 libsm6 libxext6 libxrender1 libegl1 \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.22 /uv /uvx /usr/local/bin/
@@ -42,6 +42,12 @@ RUN git clone --depth 1 --branch "${COMFYUI_REF}" https://github.com/comfyanonym
 COPY requirements.lock /opt/pa/requirements.lock
 RUN uv pip install --no-cache --compile-bytecode -r /opt/pa/requirements.lock \
  && python -c "import torch, torchvision, xformers; print('torch', torch.__version__, '· CUDA', torch.version.cuda)"
+
+# flash-attn: prebuilt wheel (BSD-3) from PozzettiAndrea/cuda-wheels, built for exactly this torch + CUDA.
+# Compiled for sm80/90/100/120, so it runs on A100, RTX 3090/4090, L40S, H100, B200 and RTX 5090.
+RUN uv pip install --no-cache --no-deps --extra-index-url https://pozzettiandrea.github.io/cuda-wheels/ \
+      --index-strategy unsafe-best-match "flash-attn==2.8.3+${PA_WHEEL_TAG}" \
+ && python -c "import flash_attn; print('flash_attn', flash_attn.__version__)"
 
 # Smoke test: ComfyUI imports and registers its nodes (CPU only, exits immediately), then clean up
 RUN cd /opt/ComfyUI \

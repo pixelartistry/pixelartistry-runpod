@@ -24,7 +24,7 @@ PA="$WS/.pixelartistry"
 T2="$PA/ComfyUI-Trellis2"
 M="$WS/models"
 WF="$WS/user/default/workflows"
-export HF_HOME="$WS/.cache/huggingface" HF_XET_HIGH_PERFORMANCE=1
+export HF_HOME="$WS/.cache/huggingface" HF_XET_HIGH_PERFORMANCE=1 REMBG_HOME="$WS/.cache/rembg"
 export UV_CACHE_DIR="$WS/.cache/uv" UV_LINK_MODE=copy
 
 log()  { printf '\n\033[1;33m[PixelArtistry]\033[0m %s\n' "$*"; }
@@ -38,6 +38,10 @@ command -v nvidia-smi >/dev/null 2>&1 || stop "No NVIDIA GPU found. Deploy this 
 GPU="$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | head -1)"
 DRV="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)"
 log "GPU: $GPU · driver $DRV"
+# flash-attn (FlashAttention-2) needs an Ampere or newer GPU (compute capability 8.0+); older cards fall back to sdpa/xformers
+CC="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 || true)"
+CC_MAJOR="${CC%%.*}"; [[ "$CC_MAJOR" =~ ^[0-9]+$ ]] || CC_MAJOR=9
+export PA_SAFE_ATTN=0; (( CC_MAJOR >= 8 )) || PA_SAFE_ATTN=1
 if (( ${DRV%%.*} < 570 )); then
   stop "Driver $DRV is too old: this image uses CUDA 12.8 and needs driver 570+. Terminate this pod and redeploy with Filter -> CUDA version 12.8 (or newer)."
 fi
@@ -62,7 +66,9 @@ if [[ ! "$TRELLIS2_REF" =~ ^[0-9a-f]{40}$ || "$(git -C "$T2" rev-parse HEAD)" !=
   git -C "$T2" checkout -q -f --detach "origin/$TRELLIS2_REF" 2>/dev/null || git -C "$T2" checkout -q -f --detach "$TRELLIS2_REF"
 fi
 
-# flash_attn has no prebuilt wheel in this image, so new LoadModel nodes default to sdpa + xformers
+# flash-attn is in the image, so the nodes' own defaults (flash_attn) work. Pre-Ampere GPUs can't run it:
+# there new LoadModel nodes default to sdpa + xformers instead
+if [[ "$PA_SAFE_ATTN" == 1 ]]; then
 "$PY" - "$T2/nodes.py" <<'PY'
 import re, sys
 p = sys.argv[1]; s = open(p).read()
@@ -70,6 +76,7 @@ s = re.sub(r'("backend": \(\[[^\]]*\],\{"default":)"flash_attn"', r'\1"sdpa"', s
 s = re.sub(r'("sparse_backend": \(\[[^\]]*\],\{"default":)"flash_attn"', r'\1"xformers"', s, count=1)
 open(p, "w").write(s)
 PY
+fi
 ln -sfn "$T2" "$COMFY/custom_nodes/ComfyUI-Trellis2"
 
 # Prebuilt CUDA wheels (cu128 + torch 2.8, Python 3.12) from PozzettiAndrea/cuda-wheels + meshlib.
@@ -83,7 +90,7 @@ uv pip install -q --python "$PY" --no-deps --extra-index-url "$WHEEL_INDEX" --in
   || stop "Could not install the CUDA wheels ($WHEEL_TAG) from $WHEEL_INDEX. Check the pod's internet access and restart."
 SP="$("$PY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
 for m in cumesh o_voxel flex_gemm; do ln -sfn "$SP/${m}_vb" "$SP/$m"; done
-"$PY" -c "import torch, xformers, cumesh, o_voxel, flex_gemm, nvdiffrast.torch, meshlib.mrmeshpy, pymeshlab; print('torch', torch.__version__, '· CUDA', torch.version.cuda, '· GPU ok' if torch.cuda.is_available() else '· GPU NOT VISIBLE')"
+"$PY" -c "import torch, xformers, flash_attn, cumesh, o_voxel, flex_gemm, nvdiffrast.torch, meshlib.mrmeshpy, pymeshlab; print('torch', torch.__version__, '· CUDA', torch.version.cuda, '· GPU ok' if torch.cuda.is_available() else '· GPU NOT VISIBLE')"
 
 # ---------- 4/5 models (first start only; existing files are skipped) ----------
 log "4/5 Models: $MODELS"
@@ -142,7 +149,8 @@ for f in glob.glob(os.path.join(src, "*.json")):
     if os.path.exists(out):
         continue  # never overwrite the user's edits
     d = json.load(open(f))
-    fix(d)
+    if os.environ.get("PA_SAFE_ATTN") == "1":  # pre-Ampere GPU: no flash-attn, switch the example workflows to sdpa/xformers
+        fix(d)
     json.dump(d, open(out, "w"), indent=1)
 PY
 
